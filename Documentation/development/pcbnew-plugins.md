@@ -1,0 +1,112 @@
+# Plugin development for pcbnew #
+
+## Introduction ##
+Recently KiCad introduced a python plugin interface for the pcbnew application. 
+The interface is generated using the `Simplified Wrapper and Interface Generator` or [SWIG](http://www.swig.org).
+SWIG is instructed to translate specific C/C++ header files into other languages using `interface` files. 
+These files ultimately decide what C/C++ functions, classes and other declarations are exported and can be found in `pcbnew/swig/`.
+
+During build-time the SWIG interface files are used to generate the corresponding .py files.
+They are installed into python's system-wide `dist-packages` repository, thus they can be imported by any python interpreter installed on the system. 
+However it should be noted that KiCad officially uses Python 2.7 for it's plugin interface.
+
+## Existing pcbnew Python API documentation ##
+The pcbnew Python API is often used stand-alone, i.e. no instance of pcbnew is running and the board project to be manipulated is loaded and saved from and to file.
+Using this approach is shown with some examples in the [users documentation](http://docs.kicad-pcb.org/stable/en/pcbnew.html#_kicad_scripting_reference).
+
+In addition, an auto-generated doxygen reference of the API can be found [here](http://docs.kicad-pcb.org/doxygen-python/namespacepcbnew.html).
+
+## `Action Plugin` support ##
+Besides the stand-alone usage of the generated python plugin interface, additional support regarding `live` manipulation of board projects has been implemented into KiCad recently.
+This feature is called `Action Plugin` and is implemented using a pcbnew menu entry that can be found under `Tools->External Plugins`.
+KiCad plugins, when followed some conventions can be made to show up as external plugins in that menu. 
+The user can run the plugin and a defined entry function in the Python plugin's code is called. 
+Then e.g. the currently loaded board project can be accessed and manipulated from within the Python environment.
+
+### Typical plugin structure ###
+The `Action Plugin` support is implemented by discovering specific Python packages and Python script files on pcbnew startup.
+In order for the discovery process to work, the following requirements must be met.
+
+* The plugin must be installed in the KiCad plugins search paths as documented in `scripting/kicadplugins.i`.
+  (Currently on a Linux Mint Installation this is /usr/share/kicad/scripting/plugins/ and ~/.kicad_plugins/)
+* Alternatively a symbolic link can be created in the KiCad plugin path link to the plugin file/folder in another location of the filesystem. This can be useful for development.
+* The plugin must be written as a simple Python script (*.py) located in the KiCad plugin search path
+  Note that this method is preferred for small plugins consisting of a single .py file.
+* Or the plugin must be implemented as a Python package conforming to the Python package standard definitions 
+  Note that this method is preferred for larger plugins consisting of multiple .py files and resource files such as dialogs or images.
+  See [PEP 8](https://www.python.org/dev/peps/pep-0008/) for additional details.
+* The python plugin must contain a class derived from pcbnew's `ActionPlugin` class and it's `register()` method must be executed within the plugin.
+
+The following examples demonstrate the plugin requirements.
+
+### Simple plugin example ###
+The folder structure of the simple plugin is fairly straight forward. 
+A single python script file is placed into a directory that is present in the KiCad plugin path.
+
+    + ~/.kicad_plugins/ # A folder in the KiCad plugin path
+        - simple_plugin.py
+
+The file `simple_plugin.py` contains the following.
+
+    import pcbnew
+
+    class SimplePlugin(pcbnew.ActionPlugin):
+        def defaults(self):
+            self.name = "Plugin Name as shown in pcbnew->Tools->External Plugins"
+            self.category = "A descriptive category name"
+            self.description = "A description of the plugin and what it does"
+
+        def Run(self):
+            # The entry function of the plugin that is executed on user action
+            print("Hello World")
+
+    SimplePlugin().register() # Instantiate and register to pcbnew
+
+### Complex plugin example ###
+The complex plugin example represents a single python package that is imported on pcbnew startup. 
+When the python package is imported, the `__init__.py` file is executed and is thus a perfect place to instantiate and register the plugin to pcbnew.
+The big advantage here is, that you can modularize your plugin much better and include other files without cluttering the KiCad plugin directory.
+Additionally, the same plugin can be executed standalone using `python -m` e.g. to perform tests on the python code.
+The following folder structure shows how complex plugins are implemented:
+
+    + ~/.kicad_plugins/ # this directory has to be in the KiCad plugin path
+        + complex_plugin/ # The plugin directory (A python package)
+            - __init__.py # This file is executed when the package is imported (on pcbnew startup)
+            - __main__.py # This file is optional. See below
+            - complex_plugin_action.py # The ActionPlugin derived class lives here
+            - complex_plugin_utils.py # Other python parts of the plugin
+            + otherstuff/
+                - otherfile.png
+                - misc.txt
+
+It is recommended to name the file containing the ActionPlugin derived class as `<package-name>_action.py`. 
+In this case the file is named `complex_plugin_action.py` with the following contents:
+
+    import pcbnew
+    
+    class ComplexPluginAction(pcbnew.ActionPlugin)
+        def defaults(self):
+            self.name = "A complex action plugin"
+            self.category = "A descriptive category name"
+            self.description "A description of the plugin"
+
+        def Run(self):
+            # The entry function of the plugin that is executed on user action
+            print("Hello World")
+
+The `__init__.py` file is then used to instantiate and register the plugin to pcbnew as follows.
+
+    from .complex_plugin_action import ComplexPluginAction # Note the relative import!
+    ComplexPluginAction().register() # Instantiate and register to pcbnew
+        
+As described in [PEP 338](https://www.python.org/dev/peps/pep-0338/) Python can execute packages (or modules) as scripts. 
+This can be useful to implement a command-line stand-alone version of your KiCad plugin with minimum effort.
+In order to implement this feature, a `__main__.py` file is created in the package directory. 
+This file can be executed by running the following command.
+
+    python -m <package_name>
+
+Make sure that your current directory is the parent directory of the package directory when running the command. 
+In these examples, this would be `~/.kicad_plugins`. 
+When running the command the python interpreter runs `/complex_plugin/__init__.py` followed by `/complex_plugin/__main__.py`. 
+
