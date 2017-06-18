@@ -33,7 +33,7 @@ In order for the discovery process to work, the following requirements must be m
   Note that this method is preferred for small plugins consisting of a single .py file.
 * Alternatively the plugin must be implemented as a Python package conforming to the Python package standard definitions (See [6.4. Packages](https://docs.python.org/2/tutorial/modules.html#packages)).
   Note that this method is preferred for larger plugin projects consisting of multiple .py files and resource files such as dialogs or images.
-* The Python plugin must contain a class derived from `pcbnew.ActionPlugin` class and it's `register()` method must be called within the plugin.
+* The Python plugin must contain a class derived from `pcbnew.ActionPlugin` and it's `register()` method must be called within the plugin.
 
 The following examples demonstrate the plugin requirements.
 
